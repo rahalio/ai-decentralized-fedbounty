@@ -1,0 +1,227 @@
+openapi: 3.1.0
+info:
+  title: Fedbounty Reporting API
+  version: 0.1.0
+  description: |
+    Audit exports tying each payout to validation delta and model hash (BR-12).
+  license:
+    name: Proprietary
+    url: https://fedbounty.local/license
+  x-domain: rpt
+servers:
+  - url: https://api.fedbounty.local
+    description: Fedbounty API
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+tags:
+  - name: Reporting
+    description: Evaluation and finance audit exports
+paths:
+  /v1/reports/bounty-audit:
+    get:
+      operationId: getBountyAuditReport
+      tags: [Reporting]
+      summary: Export payouts tied to validation deltas and model hashes
+      x-repository: none
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bountyId
+          in: query
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+      responses:
+        '200':
+          description: Bounty audit report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyAuditReportResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/reports:
+    get:
+      operationId: listReports
+      tags: [Reporting]
+      summary: List generated reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/Cursor
+        - $ref: ./common/parameters.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Reports page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodReportListResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    post:
+      operationId: createPeriodReport
+      tags: [Reporting]
+      summary: Create a finance / compliance period report
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeriodReportCreateRequest'
+      responses:
+        '201':
+          description: Report created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodReportResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/reports/{reportId}:
+    get:
+      operationId: getReport
+      tags: [Reporting]
+      summary: Get period report
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/ReportId
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodReportResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+
+components:
+  securitySchemes:
+    apiKey:
+      $ref: ./common/security.yaml#/components/securitySchemes/apiKey
+    bearerAuth:
+      $ref: ./common/security.yaml#/components/securitySchemes/bearerAuth
+
+  schemas:
+    BountyAuditLine:
+      type: object
+      required: [payoutId, evaluationId, holdoutImprovementPercent, modelCid, amount]
+      properties:
+        payoutId:
+          $ref: ./common/primitives.yaml#/components/schemas/PayoutId
+        evaluationId:
+          $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+        holdoutImprovementPercent:
+          type: number
+          format: float
+        modelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+        amount:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        workerId:
+          $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+    BountyAuditReport:
+      type: object
+      required: [bountyId, totalPayout, evaluations, averageLiftPercent, lines]
+      properties:
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        totalPayout:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        evaluations:
+          type: integer
+        averageLiftPercent:
+          type: number
+          format: float
+        poisonRejects:
+          type: integer
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BountyAuditLine'
+    BountyAuditReportResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/BountyAuditReport'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    PeriodReport:
+      type: object
+      required: [reportId, period, createdAt]
+      properties:
+        reportId:
+          $ref: ./common/primitives.yaml#/components/schemas/ReportId
+        period:
+          type: string
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        summary:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    PeriodReportCreateRequest:
+      type: object
+      required: [period]
+      properties:
+        period:
+          type: string
+          minLength: 1
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        summary:
+          type: string
+    PeriodReportResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PeriodReport'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    PeriodReportListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeriodReport'
+        nextCursor:
+          type: string
+    PeriodReportListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PeriodReportListData'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta

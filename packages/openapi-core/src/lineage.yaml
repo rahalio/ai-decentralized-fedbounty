@@ -1,0 +1,211 @@
+openapi: 3.1.0
+info:
+  title: Fedbounty Lineage API
+  version: 0.1.0
+  description: |
+    Model version provenance and merges of accepted improvements (BR-7).
+  license:
+    name: Proprietary
+    url: https://fedbounty.local/license
+  x-domain: lng
+servers:
+  - url: https://api.fedbounty.local
+    description: Fedbounty API
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+tags:
+  - name: Lineage
+    description: Model version provenance and merges
+paths:
+  /v1/lineage/versions:
+    get:
+      operationId: listModelVersions
+      tags: [Lineage]
+      summary: List model versions for a bounty
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/Cursor
+        - $ref: ./common/parameters.yaml#/components/parameters/Limit
+        - name: bountyId
+          in: query
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+      responses:
+        '200':
+          description: Model version lineage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelVersionListResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    post:
+      operationId: mergeModelVersion
+      tags: [Lineage]
+      summary: Merge accepted submissions into a canonical model version
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelMergeRequest'
+      responses:
+        '201':
+          description: Version merged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelVersionResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ./common/responses.yaml#/components/responses/Conflict
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/lineage/versions/{versionId}:
+    get:
+      operationId: getModelVersion
+      tags: [Lineage]
+      summary: Get model version with contributor provenance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/ModelVersionId
+      responses:
+        '200':
+          description: Model version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelVersionResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/lineage/versions/{versionId}/pin:
+    post:
+      operationId: pinCanonicalModelVersion
+      tags: [Lineage]
+      summary: Pin version as canonical for the bounty
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/ModelVersionId
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Version pinned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelVersionResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+
+components:
+  securitySchemes:
+    apiKey:
+      $ref: ./common/security.yaml#/components/securitySchemes/apiKey
+    bearerAuth:
+      $ref: ./common/security.yaml#/components/securitySchemes/bearerAuth
+
+  schemas:
+    ModelVersion:
+      type: object
+      required:
+        - versionId
+        - bountyId
+        - modelCid
+        - contributorWorkerIds
+        - mergedAt
+      properties:
+        versionId:
+          $ref: ./common/primitives.yaml#/components/schemas/ModelVersionId
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        modelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+        parentVersionId:
+          $ref: ./common/primitives.yaml#/components/schemas/ModelVersionId
+        contributorWorkerIds:
+          type: array
+          items:
+            $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+        sourceSubmissionIds:
+          type: array
+          items:
+            $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+        canonical:
+          type: boolean
+        mergeConflict:
+          type: boolean
+        mergedAt:
+          type: string
+          format: date-time
+    ModelMergeRequest:
+      type: object
+      required: [bountyId, submissionIds]
+      properties:
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        submissionIds:
+          type: array
+          minItems: 1
+          items:
+            $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+        parentVersionId:
+          $ref: ./common/primitives.yaml#/components/schemas/ModelVersionId
+        mergedModelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+    ModelVersionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ModelVersion'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    ModelVersionListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelVersion'
+        nextCursor:
+          type: string
+    ModelVersionListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ModelVersionListData'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta

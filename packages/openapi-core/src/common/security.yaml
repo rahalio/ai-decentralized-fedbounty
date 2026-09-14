@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: Shared security schemes
+  version: 0.1.0
+  description: API-key and bearer auth for tenant-scoped Fedbounty APIs.
+paths: {}
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Tenant API key. Implies tenant isolation — no cross-tenant reads.
+        Used for federated worker submission agents and machine clients.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Organiser / admin console sessions (ML organiser, finance, compliance).
+        Issued via identity `/v0/auth/login` (sandbox stub).

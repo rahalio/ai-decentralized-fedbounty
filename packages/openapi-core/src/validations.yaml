@@ -1,0 +1,408 @@
+openapi: 3.1.0
+info:
+  title: Fedbounty Validations API
+  version: 0.1.0
+  description: |
+    Holdout scoring, anti-poison checks, validation snapshots, and dispute replay (BR-3, BR-5, BR-9).
+  license:
+    name: Proprietary
+    url: https://fedbounty.local/license
+  x-domain: vld
+servers:
+  - url: https://api.fedbounty.local
+    description: Fedbounty API
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+tags:
+  - name: Validations
+    description: Holdout scoring and anti-poisoning
+  - name: Snapshots
+    description: Organiser-held validation snapshots
+  - name: Disputes
+    description: Scoring dispute replay on frozen snapshots
+paths:
+  /v1/validations:
+    get:
+      operationId: listEvaluationResults
+      tags: [Validations]
+      summary: List holdout evaluation results
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/Cursor
+        - $ref: ./common/parameters.yaml#/components/parameters/Limit
+        - name: bountyId
+          in: query
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        - name: submissionId
+          in: query
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+      responses:
+        '200':
+          description: Evaluations page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResultListResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    post:
+      operationId: runHoldoutValidation
+      tags: [Validations]
+      summary: Queue holdout validation for a submission
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldoutValidationRequest'
+      responses:
+        '202':
+          description: Validation queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResultResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/validations/{evaluationId}:
+    get:
+      operationId: getEvaluationResult
+      tags: [Validations]
+      summary: Get holdout evaluation result
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: evaluationId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+      responses:
+        '200':
+          description: Evaluation result (workers never receive holdout labels)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResultResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/validation-snapshots:
+    post:
+      operationId: createValidationSnapshot
+      tags: [Snapshots]
+      summary: Register organiser-held holdout snapshot (labels never exposed)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationSnapshotCreateRequest'
+      responses:
+        '201':
+          description: Snapshot registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationSnapshotResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/validation-snapshots/{snapshotId}:
+    get:
+      operationId: getValidationSnapshot
+      tags: [Snapshots]
+      summary: Get snapshot metadata (no holdout labels)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: snapshotId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/ValidationSnapshotId
+      responses:
+        '200':
+          description: Snapshot metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationSnapshotResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/disputes:
+    post:
+      operationId: openScoringDispute
+      tags: [Disputes]
+      summary: Open a scoring dispute for replay on frozen snapshot
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeOpenRequest'
+      responses:
+        '201':
+          description: Dispute opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/disputes/{disputeId}/replay:
+    post:
+      operationId: replayDisputeEvaluation
+      tags: [Disputes]
+      summary: Replay evaluation on frozen validation snapshot
+      x-repository: none
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: disputeId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/DisputeId
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '202':
+          description: Replay queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/disputes/{disputeId}:
+    get:
+      operationId: getScoringDispute
+      tags: [Disputes]
+      summary: Get dispute status and replay outcome
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: disputeId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/DisputeId
+      responses:
+        '200':
+          description: Dispute
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+
+components:
+  securitySchemes:
+    apiKey:
+      $ref: ./common/security.yaml#/components/securitySchemes/apiKey
+    bearerAuth:
+      $ref: ./common/security.yaml#/components/securitySchemes/bearerAuth
+
+  schemas:
+    EvaluationStatus:
+      type: string
+      enum: [queued, running, completed, failed]
+    EvaluationResult:
+      type: object
+      required:
+        - evaluationId
+        - submissionId
+        - validationSnapshotId
+        - status
+        - createdAt
+      properties:
+        evaluationId:
+          $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+        submissionId:
+          $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        validationSnapshotId:
+          $ref: ./common/primitives.yaml#/components/schemas/ValidationSnapshotId
+        status:
+          $ref: '#/components/schemas/EvaluationStatus'
+        holdoutImprovementPercent:
+          type: number
+          format: float
+        publicMetricPercent:
+          type: number
+          format: float
+          description: Optional public metric for poison compare; organiser-only.
+        poisonDetected:
+          type: boolean
+        payoutEligible:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    HoldoutValidationRequest:
+      type: object
+      required: [submissionId]
+      properties:
+        submissionId:
+          $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+    EvaluationResultResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/EvaluationResult'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    EvaluationResultListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationResult'
+        nextCursor:
+          type: string
+    EvaluationResultListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/EvaluationResultListData'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    ValidationSnapshot:
+      type: object
+      required: [snapshotId, metricName, frozen, createdAt]
+      properties:
+        snapshotId:
+          $ref: ./common/primitives.yaml#/components/schemas/ValidationSnapshotId
+        metricName:
+          type: string
+        datasetRef:
+          type: string
+          description: Organiser-private reference; never returned as labels.
+        frozen:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    ValidationSnapshotCreateRequest:
+      type: object
+      required: [metricName]
+      properties:
+        metricName:
+          type: string
+          minLength: 1
+        datasetRef:
+          type: string
+        freezeNow:
+          type: boolean
+          default: true
+    ValidationSnapshotResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ValidationSnapshot'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    DisputeStatus:
+      type: string
+      enum: [open, replaying, upheld, overturned, closed]
+    ScoringDispute:
+      type: object
+      required:
+        - disputeId
+        - evaluationId
+        - validationSnapshotId
+        - status
+        - createdAt
+      properties:
+        disputeId:
+          $ref: ./common/primitives.yaml#/components/schemas/DisputeId
+        evaluationId:
+          $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+        validationSnapshotId:
+          $ref: ./common/primitives.yaml#/components/schemas/ValidationSnapshotId
+        status:
+          $ref: '#/components/schemas/DisputeStatus'
+        reason:
+          type: string
+        replayEvaluationId:
+          $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+    DisputeOpenRequest:
+      type: object
+      required: [evaluationId, reason]
+      properties:
+        evaluationId:
+          $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+        reason:
+          type: string
+          minLength: 1
+    DisputeResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ScoringDispute'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta

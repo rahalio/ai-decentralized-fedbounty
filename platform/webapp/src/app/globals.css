@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-ink: #e6eef5;
+  --color-ocean-950: #061018;
+  --color-ocean-900: #0e1a24;
+  --color-buoy: #e0893a;
+  --color-ledger: #2db89a;
+  --color-coral: #e25b4c;
+  --color-steel: #7e93a6;
+  --color-brand: #8fb8c9;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --motion-eval: 200ms ease-out;
+  --motion-pay: 220ms ease-out;
+  --motion-freeze: 260ms ease-in-out;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--color-ocean-950);
+  color: var(--color-ink);
+}
+
+body {
+  background-image:
+    linear-gradient(180deg, rgba(143, 184, 201, 0.04), transparent 40%),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 47px,
+      rgba(126, 147, 166, 0.05) 48px
+    );
+}
+
+@keyframes score-reveal {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes payout-flash {
+  0% { background-color: rgba(45, 184, 154, 0.22); }
+  100% { background-color: transparent; }
+}
+
+@keyframes freeze-veil {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.motion-eval {
+  animation: score-reveal var(--motion-eval);
+}
+
+.motion-pay {
+  animation: payout-flash var(--motion-pay);
+}
+
+.motion-freeze {
+  animation: freeze-veil var(--motion-freeze);
+}

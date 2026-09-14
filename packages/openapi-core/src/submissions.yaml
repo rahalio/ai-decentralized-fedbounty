@@ -1,0 +1,232 @@
+openapi: 3.1.0
+info:
+  title: Fedbounty Submissions API
+  version: 0.1.0
+  description: |
+    Content-addressed model artifact intake — IPFS CIDs only; reject on-chain weight blobs (BR-2, BR-6).
+  license:
+    name: Proprietary
+    url: https://fedbounty.local/license
+  x-domain: sub
+servers:
+  - url: https://api.fedbounty.local
+    description: Fedbounty API
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+tags:
+  - name: Submissions
+    description: Worker model artifact intake via content addressing
+paths:
+  /v1/submissions:
+    get:
+      operationId: listModelSubmissions
+      tags: [Submissions]
+      summary: List model submissions
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/Cursor
+        - $ref: ./common/parameters.yaml#/components/parameters/Limit
+        - name: bountyId
+          in: query
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        - name: workerId
+          in: query
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/SubmissionStatus'
+      responses:
+        '200':
+          description: Submissions page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSubmissionListResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    post:
+      operationId: submitModelArtifact
+      tags: [Submissions]
+      summary: Submit content-addressed model update
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelSubmissionRequest'
+      responses:
+        '201':
+          description: Submission accepted for evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSubmissionResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ./common/responses.yaml#/components/responses/Conflict
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/submissions/{submissionId}:
+    get:
+      operationId: getModelSubmission
+      tags: [Submissions]
+      summary: Get submission status
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+      responses:
+        '200':
+          description: Submission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSubmissionResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/submissions/{submissionId}/quarantine:
+    post:
+      operationId: quarantineModelSubmission
+      tags: [Submissions]
+      summary: Quarantine submission after sandbox crash or format failure
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmissionQuarantineRequest'
+      responses:
+        '200':
+          description: Submission quarantined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSubmissionResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+
+components:
+  securitySchemes:
+    apiKey:
+      $ref: ./common/security.yaml#/components/securitySchemes/apiKey
+    bearerAuth:
+      $ref: ./common/security.yaml#/components/securitySchemes/bearerAuth
+
+  schemas:
+    SubmissionStatus:
+      type: string
+      enum: [pending, evaluating, accepted, rejected, quarantined]
+    ModelSubmission:
+      type: object
+      required:
+        - submissionId
+        - bountyId
+        - workerId
+        - modelCid
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        submissionId:
+          $ref: ./common/primitives.yaml#/components/schemas/SubmissionId
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        workerId:
+          $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+        modelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+        status:
+          $ref: '#/components/schemas/SubmissionStatus'
+        rejectReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ModelSubmissionRequest:
+      type: object
+      required: [bountyId, workerId, modelCid]
+      properties:
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        workerId:
+          $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+        modelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+        publicMetricHint:
+          type: number
+          format: float
+          description: Optional worker-visible metric; never used for payout (BR-3).
+    SubmissionQuarantineRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+    ModelSubmissionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ModelSubmission'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    ModelSubmissionListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelSubmission'
+        nextCursor:
+          type: string
+    ModelSubmissionListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ModelSubmissionListData'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta

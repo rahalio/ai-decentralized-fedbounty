@@ -1,0 +1,499 @@
+openapi: 3.1.0
+info:
+  title: Fedbounty Bounties API
+  version: 0.1.0
+  description: |
+    Bounty catalogue — base model CID, holdout binding, reward curve, privacy mode,
+    worker enrollment/attestation, freeze/close (BR-1, BR-8, BR-10, BR-11).
+  license:
+    name: Proprietary
+    url: https://fedbounty.local/license
+  x-domain: bty
+servers:
+  - url: https://api.fedbounty.local
+    description: Fedbounty API
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+tags:
+  - name: Bounties
+    description: Bounty catalogue, base models, reward curves, and lifecycle
+  - name: Enrollments
+    description: Worker enrollment and environment attestation
+paths:
+  /v1/bounties:
+    get:
+      operationId: listBounties
+      tags: [Bounties]
+      summary: List federated improvement bounties
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/Cursor
+        - $ref: ./common/parameters.yaml#/components/parameters/Limit
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/BountyStatus'
+      responses:
+        '200':
+          description: Bounties page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyListResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    post:
+      operationId: createBounty
+      tags: [Bounties]
+      summary: Publish a bounty with base model, holdout, and reward curve
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BountyCreateRequest'
+      responses:
+        '201':
+          description: Bounty created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/bounties/{bountyId}:
+    parameters:
+      - name: bountyId
+        in: path
+        required: true
+        schema:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+    get:
+      operationId: getBounty
+      tags: [Bounties]
+      summary: Get bounty details
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Bounty
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    patch:
+      operationId: updateBounty
+      tags: [Bounties]
+      summary: Update draft or open bounty metadata (not holdout labels)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BountyUpdateRequest'
+      responses:
+        '200':
+          description: Bounty updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common/responses.yaml#/components/responses/Conflict
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/bounties/{bountyId}/publish:
+    post:
+      operationId: publishBounty
+      tags: [Bounties]
+      summary: Open a draft bounty for worker enrollment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bountyId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Bounty opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common/responses.yaml#/components/responses/Conflict
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/bounties/{bountyId}/freeze:
+    post:
+      operationId: freezeBounty
+      tags: [Bounties]
+      summary: Freeze bounty on leakage suspicion (halts evals and payouts)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bountyId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BountyFreezeRequest'
+      responses:
+        '200':
+          description: Bounty frozen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/bounties/{bountyId}/close:
+    post:
+      operationId: closeBounty
+      tags: [Bounties]
+      summary: Close bounty permanently
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bountyId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Bounty closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BountyResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/bounties/{bountyId}/enrollments:
+    parameters:
+      - name: bountyId
+        in: path
+        required: true
+        schema:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+    get:
+      operationId: listBountyEnrollments
+      tags: [Enrollments]
+      summary: List worker enrollments for a bounty
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/Cursor
+        - $ref: ./common/parameters.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Enrollments page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerEnrollmentListResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    post:
+      operationId: enrollWorker
+      tags: [Enrollments]
+      summary: Enroll worker with environment attestation
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerEnrollmentRequest'
+      responses:
+        '201':
+          description: Worker enrolled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerEnrollmentResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common/responses.yaml#/components/responses/Conflict
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+
+components:
+  securitySchemes:
+    apiKey:
+      $ref: ./common/security.yaml#/components/securitySchemes/apiKey
+    bearerAuth:
+      $ref: ./common/security.yaml#/components/securitySchemes/bearerAuth
+
+  schemas:
+    BountyStatus:
+      type: string
+      enum: [draft, open, frozen, closed]
+    PrivacyMode:
+      type: string
+      enum: [federated, mpc, homomorphic]
+      description: Declared privacy mechanism flag (BR-8); does not mandate a stack.
+    RewardCurveTier:
+      type: object
+      required: [minImprovementPercent, payoutAmount]
+      properties:
+        minImprovementPercent:
+          type: number
+          format: float
+          description: Minimum holdout lift % for this tier.
+        payoutAmount:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+    Bounty:
+      type: object
+      required:
+        - bountyId
+        - name
+        - status
+        - baseModelCid
+        - validationSnapshotId
+        - rewardCurve
+        - privacyMode
+        - createdAt
+        - updatedAt
+      properties:
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        name:
+          type: string
+          minLength: 1
+        status:
+          $ref: '#/components/schemas/BountyStatus'
+        baseModelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+        validationSnapshotId:
+          $ref: ./common/primitives.yaml#/components/schemas/ValidationSnapshotId
+        rewardCurve:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RewardCurveTier'
+        privacyMode:
+          $ref: '#/components/schemas/PrivacyMode'
+        escrowAccountId:
+          $ref: ./common/primitives.yaml#/components/schemas/EscrowAccountId
+        escrowBalance:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        perWorkerCap:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        freezeReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    BountyCreateRequest:
+      type: object
+      required: [name, baseModelCid, validationSnapshotId, rewardCurve, privacyMode]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        baseModelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+        validationSnapshotId:
+          $ref: ./common/primitives.yaml#/components/schemas/ValidationSnapshotId
+        rewardCurve:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RewardCurveTier'
+        privacyMode:
+          $ref: '#/components/schemas/PrivacyMode'
+        perWorkerCap:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        initialEscrow:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+    BountyUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        rewardCurve:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RewardCurveTier'
+        privacyMode:
+          $ref: '#/components/schemas/PrivacyMode'
+        perWorkerCap:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+    BountyFreezeRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          description: Leakage / quarantine rationale for compliance.
+    BountyResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Bounty'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    BountyListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bounty'
+        nextCursor:
+          type: string
+    BountyListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/BountyListData'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    EnrollmentStatus:
+      type: string
+      enum: [pending_attestation, active, blocked]
+    WorkerEnrollment:
+      type: object
+      required:
+        - enrollmentId
+        - bountyId
+        - workerId
+        - status
+        - environmentAttestation
+        - termsAccepted
+        - createdAt
+      properties:
+        enrollmentId:
+          $ref: ./common/primitives.yaml#/components/schemas/EnrollmentId
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        workerId:
+          $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+        status:
+          $ref: '#/components/schemas/EnrollmentStatus'
+        environmentAttestation:
+          type: string
+          description: Software/runtime attestation digest or statement.
+        termsAccepted:
+          type: boolean
+        attestedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    WorkerEnrollmentRequest:
+      type: object
+      required: [workerId, environmentAttestation, termsAccepted]
+      properties:
+        workerId:
+          $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+        environmentAttestation:
+          type: string
+          minLength: 1
+        termsAccepted:
+          type: boolean
+          description: Must be true; anti-poison and local-train terms.
+    WorkerEnrollmentResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/WorkerEnrollment'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    WorkerEnrollmentListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerEnrollment'
+        nextCursor:
+          type: string
+    WorkerEnrollmentListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/WorkerEnrollmentListData'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta

@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: Fedbounty Rewards API
+  version: 0.1.0
+  description: |
+    Escrow and payout on measured holdout lift — zero pay for non-positive lift; per-worker caps (BR-4, BR-10).
+  license:
+    name: Proprietary
+    url: https://fedbounty.local/license
+  x-domain: rwd
+servers:
+  - url: https://api.fedbounty.local
+    description: Fedbounty API
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+tags:
+  - name: Rewards
+    description: Escrow and payout on measured improvement
+paths:
+  /v1/rewards/payouts:
+    get:
+      operationId: listRewardPayouts
+      tags: [Rewards]
+      summary: List reward payouts
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/Cursor
+        - $ref: ./common/parameters.yaml#/components/parameters/Limit
+        - name: bountyId
+          in: query
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PayoutStatus'
+      responses:
+        '200':
+          description: Payouts page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardPayoutListResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+    post:
+      operationId: executeRewardPayout
+      tags: [Rewards]
+      summary: Execute payout from evaluation (zero if not eligible)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardPayoutRequest'
+      responses:
+        '202':
+          description: Payout initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardPayoutResponse'
+        '400':
+          $ref: ./common/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '409':
+          $ref: ./common/responses.yaml#/components/responses/Conflict
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/rewards/payouts/{payoutId}:
+    get:
+      operationId: getRewardPayout
+      tags: [Rewards]
+      summary: Get payout record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: payoutId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/PayoutId
+      responses:
+        '200':
+          description: Payout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardPayoutResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/rewards/escrow/{bountyId}:
+    get:
+      operationId: getEscrowAccount
+      tags: [Rewards]
+      summary: Get escrow balance and per-worker caps for a bounty
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bountyId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+      responses:
+        '200':
+          description: Escrow account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAccountResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+  /v1/rewards/escrow/{bountyId}/pause:
+    post:
+      operationId: pauseEscrow
+      tags: [Rewards]
+      summary: Pause escrow disbursements
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bountyId
+          in: path
+          required: true
+          schema:
+            $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        - $ref: ./common/parameters.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Escrow paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscrowAccountResponse'
+        '401':
+          $ref: ./common/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common/responses.yaml#/components/responses/NotFound
+        default:
+          $ref: ./common/responses.yaml#/components/responses/Problem
+
+components:
+  securitySchemes:
+    apiKey:
+      $ref: ./common/security.yaml#/components/securitySchemes/apiKey
+    bearerAuth:
+      $ref: ./common/security.yaml#/components/securitySchemes/bearerAuth
+
+  schemas:
+    PayoutStatus:
+      type: string
+      enum: [pending, paid, failed, zero]
+    RewardPayout:
+      type: object
+      required:
+        - payoutId
+        - evaluationId
+        - bountyId
+        - amount
+        - status
+        - createdAt
+      properties:
+        payoutId:
+          $ref: ./common/primitives.yaml#/components/schemas/PayoutId
+        evaluationId:
+          $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        workerId:
+          $ref: ./common/primitives.yaml#/components/schemas/WorkerId
+        amount:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        holdoutImprovementPercent:
+          type: number
+          format: float
+        modelCid:
+          $ref: ./common/primitives.yaml#/components/schemas/ContentCid
+        status:
+          $ref: '#/components/schemas/PayoutStatus'
+        createdAt:
+          type: string
+          format: date-time
+        settledAt:
+          type: string
+          format: date-time
+    RewardPayoutRequest:
+      type: object
+      required: [evaluationId]
+      properties:
+        evaluationId:
+          $ref: ./common/primitives.yaml#/components/schemas/EvaluationId
+    RewardPayoutResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/RewardPayout'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    RewardPayoutListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardPayout'
+        nextCursor:
+          type: string
+    RewardPayoutListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/RewardPayoutListData'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
+    EscrowStatus:
+      type: string
+      enum: [active, paused, drained]
+    EscrowAccount:
+      type: object
+      required:
+        - escrowAccountId
+        - bountyId
+        - balance
+        - status
+        - updatedAt
+      properties:
+        escrowAccountId:
+          $ref: ./common/primitives.yaml#/components/schemas/EscrowAccountId
+        bountyId:
+          $ref: ./common/primitives.yaml#/components/schemas/BountyId
+        balance:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        perWorkerCap:
+          $ref: ./common/primitives.yaml#/components/schemas/Money
+        status:
+          $ref: '#/components/schemas/EscrowStatus'
+        updatedAt:
+          type: string
+          format: date-time
+    EscrowAccountResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/EscrowAccount'
+        meta:
+          $ref: ./common/envelopes.yaml#/components/schemas/ResponseMeta
