@@ -1,0 +1,440 @@
+openapi: 3.0.3
+info:
+  title: Fedbounty
+  version: 0.1.0
+  description: >-
+    Federated model-improvement bounty exchange. Organisers publish models and
+    holdout validation criteria; workers train locally; rewards pay on validation lift.
+  x-product-slug: ai-decentralized-fedbounty
+  x-source: ai-in-decentralized+ai/aiblockchain-180511025341/
+servers:
+  - url: https://api.example.com
+tags:
+  - name: Bounties
+    description: Bounty catalogue, base models, and reward curves
+  - name: Submissions
+    description: Worker model artifact intake via content addressing
+  - name: Validations
+    description: Holdout scoring and anti-poisoning checks
+  - name: Rewards
+    description: Escrow and payout on measured improvement
+  - name: Lineage
+    description: Model version provenance and merges
+  - name: Reporting
+    description: Evaluation and finance audit exports
+paths:
+  /v1/bounties:
+    get:
+      operationId: listBounties
+      tags: [Bounties]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, open, frozen, closed]
+      responses:
+        "200":
+          description: Bounties page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelopeBounty"
+    post:
+      operationId: createBounty
+      tags: [Bounties]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BountyCreate"
+      responses:
+        "201":
+          description: Bounty published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeBounty"
+  /v1/bounties/{bountyId}:
+    parameters:
+      - $ref: "#/components/parameters/BountyId"
+    get:
+      operationId: getBounty
+      tags: [Bounties]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Bounty
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeBounty"
+  /v1/bounties/{bountyId}/enrollments:
+    parameters:
+      - $ref: "#/components/parameters/BountyId"
+    post:
+      operationId: enrollWorker
+      tags: [Bounties]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkerEnrollment"
+      responses:
+        "201":
+          description: Worker enrolled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeWorkerEnrollment"
+  /v1/submissions:
+    post:
+      operationId: submitModelArtifact
+      tags: [Submissions]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelSubmission"
+      responses:
+        "201":
+          description: Submission accepted for evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeModelSubmission"
+  /v1/submissions/{submissionId}:
+    parameters:
+      - name: submissionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getModelSubmission
+      tags: [Submissions]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Submission status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeModelSubmission"
+  /v1/validations:
+    post:
+      operationId: runHoldoutValidation
+      tags: [Validations]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [submissionId]
+              properties:
+                submissionId:
+                  type: string
+      responses:
+        "202":
+          description: Validation queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeEvaluationResult"
+  /v1/validations/{evaluationId}:
+    parameters:
+      - name: evaluationId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getEvaluationResult
+      tags: [Validations]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Holdout evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeEvaluationResult"
+  /v1/rewards/payouts:
+    post:
+      operationId: executeRewardPayout
+      tags: [Rewards]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewardPayoutRequest"
+      responses:
+        "202":
+          description: Payout initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeRewardPayout"
+  /v1/lineage/versions:
+    get:
+      operationId: listModelVersions
+      tags: [Lineage]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bountyId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Model version lineage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelopeModelVersion"
+    post:
+      operationId: mergeModelVersion
+      tags: [Lineage]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelMergeRequest"
+      responses:
+        "201":
+          description: Version merged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeModelVersion"
+  /v1/reports/bounty-audit:
+    get:
+      operationId: getBountyAuditReport
+      tags: [Reporting]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bountyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payouts tied to validation deltas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeBountyAuditReport"
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    BountyId:
+      name: bountyId
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    ResponseMeta:
+      type: object
+      required: [requestId, timestamp]
+      properties:
+        requestId: { type: string }
+        timestamp: { type: string, format: date-time }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+    Bounty:
+      type: object
+      required: [id, name, status, baseModelCid]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [draft, open, frozen, closed] }
+        baseModelCid: { type: string }
+        escrowBalance: { type: number, format: double }
+        privacyMode: { type: string, enum: [federated, mpc, homomorphic] }
+    BountyCreate:
+      type: object
+      required: [name, baseModelCid, rewardCurve]
+      properties:
+        name: { type: string }
+        baseModelCid: { type: string }
+        validationSnapshotId: { type: string }
+        rewardCurve:
+          type: array
+          items:
+            type: object
+            properties:
+              minImprovementPercent: { type: number, format: float }
+              payoutAmount: { type: number, format: double }
+    WorkerEnrollment:
+      type: object
+      required: [workerId, environmentAttestation]
+      properties:
+        workerId: { type: string }
+        environmentAttestation: { type: string }
+    ModelSubmission:
+      type: object
+      required: [bountyId, workerId, modelCid]
+      properties:
+        bountyId: { type: string }
+        workerId: { type: string }
+        modelCid: { type: string }
+    ModelSubmissionRecord:
+      type: object
+      properties:
+        id: { type: string }
+        bountyId: { type: string }
+        modelCid: { type: string }
+        status: { type: string, enum: [pending, evaluating, accepted, rejected] }
+    EvaluationResult:
+      type: object
+      properties:
+        id: { type: string }
+        submissionId: { type: string }
+        holdoutImprovementPercent: { type: number, format: float }
+        poisonDetected: { type: boolean }
+        payoutEligible: { type: boolean }
+    RewardPayoutRequest:
+      type: object
+      required: [evaluationId]
+      properties:
+        evaluationId: { type: string }
+    RewardPayout:
+      type: object
+      properties:
+        id: { type: string }
+        amount: { type: number, format: double }
+        status: { type: string, enum: [pending, paid, failed] }
+    ModelVersion:
+      type: object
+      properties:
+        id: { type: string }
+        bountyId: { type: string }
+        modelCid: { type: string }
+        contributorWorkerIds: { type: array, items: { type: string } }
+        mergedAt: { type: string, format: date-time }
+    ModelMergeRequest:
+      type: object
+      required: [bountyId, submissionIds]
+      properties:
+        bountyId: { type: string }
+        submissionIds: { type: array, items: { type: string } }
+    BountyAuditReport:
+      type: object
+      properties:
+        bountyId: { type: string }
+        totalPayout: { type: number, format: double }
+        evaluations: { type: integer }
+        averageLiftPercent: { type: number, format: float }
+    DataEnvelopeBounty:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: "#/components/schemas/Bounty" }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    DataEnvelopeWorkerEnrollment:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: "#/components/schemas/WorkerEnrollment" }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    DataEnvelopeModelSubmission:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: "#/components/schemas/ModelSubmissionRecord" }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    DataEnvelopeEvaluationResult:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: "#/components/schemas/EvaluationResult" }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    DataEnvelopeRewardPayout:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: "#/components/schemas/RewardPayout" }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    DataEnvelopeModelVersion:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: "#/components/schemas/ModelVersion" }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    DataEnvelopeBountyAuditReport:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: "#/components/schemas/BountyAuditReport" }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    ListEnvelopeBounty:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Bounty" } }
+            nextCursor: { type: string }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
+    ListEnvelopeModelVersion:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ModelVersion" } }
+            nextCursor: { type: string }
+        meta: { $ref: "#/components/schemas/ResponseMeta" }
